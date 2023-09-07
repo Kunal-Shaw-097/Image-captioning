@@ -75,4 +75,9 @@ class Model(nn.Module) :
         x = self.forward(x1, x)
         x = F.softmax(x)'''
 
+
+    def process_output(self ,x : torch.Tensor) :
+        x = torch.argmax(F.softmax(x, dim= -1), dim = -1)
+        return x
+
         

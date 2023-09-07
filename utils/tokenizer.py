@@ -62,16 +62,17 @@ class Tokenizer:
         return indx
 
 
-    def create_mask_and_pad(self, x: list):
+    def create_mask_and_pad(self, x: list, do_mask : bool = False):
         max = 0
+        mask = None
         for line in x:
             length = len(line)
             if length > max:
                 max = length
-
-        mask = torch.tril(
-            torch.ones(max, max)
-        )  # create a lower traingle matrix of size T,T
+        if do_mask :
+            mask = torch.tril(
+                torch.ones(max, max)
+            )  # create a lower traingle matrix of size T,T
 
         for i, line in enumerate(x):
             while len(line) < max:
@@ -79,7 +80,7 @@ class Tokenizer:
         return x, mask
 
 
-    def encode(self, x: list):
+    def encode(self, x: list, mask : bool = False):
         encoded_x = []
 
         if isinstance(x, list):  # batched encoding
@@ -102,7 +103,7 @@ class Tokenizer:
                     self.word_to_index["</S>"]
                 )  # adding ending token index
                 encoded_x.append(encoded_line)
-            encoded_x, mask = self.create_mask_and_pad(encoded_x)
+            encoded_x, mask = self.create_mask_and_pad(encoded_x, do_mask = mask)
 
         else:  # single encoding
             encoded_x.append(self.word_to_index["<S>"])  # adding starting token index
@@ -131,9 +132,9 @@ class Tokenizer:
             y.append(self.index_to_word[str(int(indx))])
         pop_indx = []  # indexes to be removed after they are merged into other words
         for i, word in enumerate(y):
-            if word in ["<S>", "</S>", "<PAD>"]:
+            '''if word in ["<S>", "</S>", "<PAD>"]:
                 pop_indx.append(i)
-            elif len(
+            if len(
                 re.findall("\W", word.replace("</w>", ""))
             ):  # case of special characters
                 y[i - 1] = y[i - 1] + y[i] # adding the special characters to the previous word
@@ -144,7 +145,7 @@ class Tokenizer:
             ):  # case of subwords which are not the last part of a word
                 y[i + 1] =  y[i] + y[i + 1]  # combine then to the next subword to create  the full word
                 pop_indx.append(i)
-                continue
+                continue'''
             y[i] = word.replace("</w>", "")  # removing the end of word token
         for i in reversed(pop_indx):  # popping off all the merged indexes
             y.pop(i)

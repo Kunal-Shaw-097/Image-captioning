@@ -1,9 +1,84 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import math
 
 # NLP
+
+class Faster_Self_Attention(nn.Module) :
+    def __init__(self, emb_dim : int = 512, num_heads : int = 8, dropout : float = 0.0):
+        super().__init__()
+        assert emb_dim % num_heads == 0
+        # key, query, value projections for all heads, but in a batch
+        self.c_attn = nn.Linear(emb_dim, 3 * emb_dim, bias= False)
+        # output projection
+        self.c_proj = nn.Linear(emb_dim, emb_dim, bias= False)
+        # regularization
+        self.num_head = num_heads
+        self.n_embd = emb_dim
+        self.dropout= dropout
+        self.dropout_layer = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
+
+        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
+        q = q.view(B, T, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
+        k = k.view(B, T, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
+        v = v.view(B, T, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, sT, hs)
+
+        if self.training :
+            is_casual = True
+            dropout = self.dropout
+        else :
+            is_casual = False
+            dropout = 0.0
+
+        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p= dropout, is_causal= is_casual) 
+        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        
+
+        # output projection
+        y = self.dropout_layer(self.c_proj(y))
+        return y
+
+class Faster_Cross_Attention(nn.Module) :
+    def __init__(self, emb_dim : int = 512, num_heads : int = 8, dropout : float = 0.0) :
+        super().__init__()
+        # query value for x1 for all heads
+        self.q = nn.Linear(emb_dim, emb_dim, bias = False)
+        # key, value from x2 for all heads
+        self.kv = nn.Linear(emb_dim, 2*emb_dim, bias = False)
+        self.c_proj = nn.Linear(emb_dim, emb_dim, bias= False)
+        # regularization
+        self.num_head = num_heads
+        self.n_embd = emb_dim
+        self.dropout= dropout
+        self.dropout_layer = nn.Dropout(dropout)
+    
+    def forward(self, x1 : torch.Tensor, x2 : torch.Tensor):
+        B, T1, C = x1.size() # batch size, sequence length, embedding dimensionality (n_embd)
+        B, T2, C = x2.size() # batch size, image_size/32(enocder output length) , embedding dimensionality (n_embd)
+        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        q= self.q(x1)
+        k, v = self.kv(x2).split(self.n_embd, dim=2)
+        q = q.view(B, T1, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
+        k = k.view(B, T2, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
+        v = v.view(B, T2, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
+        if self.training :
+            dropout = self.dropout
+        else :
+            dropout = 0.0
+        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p= dropout ,is_causal= False) 
+        y = y.transpose(1, 2).contiguous().view(B, T1, C) # re-assemble all head outputs side by side
+        
+
+        # output projection
+        y = self.dropout_layer(self.c_proj(y))
+        return y
 
 
 class Attention_head(nn.Module):
@@ -143,13 +218,16 @@ class Cross_Multi_head_Attention(Multi_head_Attention):
 class decoder_block(nn.Module):
     def __init__(self, emb_dim: int = 512, num_heads: int = 8):
         super().__init__()
-        self.mha = Self_Multi_head_Attention(emb_dim, num_heads)  # self-attention
-        self.cha = Cross_Multi_head_Attention(emb_dim, num_heads)  # cross-attention
+        self.mha = Faster_Self_Attention(emb_dim, num_heads, dropout= 0.1)  # self-attention
+        #self.mha = Self_Multi_head_Attention(emb_dim, num_heads)
+        #self.cha = Cross_Multi_head_Attention(emb_dim, num_heads)  # cross-attention
+        self.cha = Faster_Cross_Attention(emb_dim, num_heads, dropout= 0.1)
         self.layer_norm = nn.LayerNorm(emb_dim)
         self.ff = FeedForward(emb_dim)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor, mask: torch.Tensor):
-        out1 = self.mha(x1, mask)
+        out1 = self.mha(x1)
+        #out1 = self.mha(x1, mask)
         out1 = self.layer_norm(x1 + out1)
     
         out2 = self.cha(out1, x2)
