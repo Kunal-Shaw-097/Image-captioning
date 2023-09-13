@@ -20,44 +20,37 @@ class Encoder(nn.Module) :
     
     
 class Decoder(nn.Module) :
-    def __init__(self, vocab_size : int, emb_dim : int = 512, num_heads : int = 8, num_layers : int = 6) :
-        super().__init__()
-        self.dec = nn.ModuleList([decoder_block(emb_dim, num_heads)] * num_layers)
-        self.embs = Embedding(vocab_size, embedding_dim= emb_dim)
-        self.pos_enc =  PositionalEncoding(emb_dim)
-    
-    def forward(self, x1 : torch.Tensor, x2 : torch.Tensor , mask : torch.Tensor) :
+    def __init__(self, vocab_size : int, emb_dim : int = 512, num_heads : int = 8, num_layers : int = 6, dropout : float = 0.0) :
         
-        x2 = self.embs(x2)                                                                        #from (B,T) to (B,T,emb_dim)
-        x2 = self.pos_enc(x2)                                                                     #adding positional encoding
+        super().__init__()
+        self.dec = nn.ModuleList([decoder_block(emb_dim, num_heads, dropout= dropout)] * num_layers)
+    
+    def forward(self, x1 : torch.Tensor, x2 : torch.Tensor) :
 
         for layer in self.dec :
-            x2 = layer(x2 , x1, mask)
+            x2 = layer(x2 , x1)
 
         return x2
 
-class Prediction_head(nn.Module) : 
-    def __init__(self, vocab_size : int, emb_dim : int = 512) :
-        super().__init__()
-        self.linear = nn.Linear(emb_dim, vocab_size)
-
-    def forward(self, x: torch.Tensor) :
-        return self.linear(x)
 
 class Model(nn.Module) :
-    def __init__(self, vocab_size : int, c1 : int = 3, emb_dim : int = 512, num_heads = 8, num_layers = 6, channel_ratio : list = 
+    def __init__(self, vocab_size : int, c1 : int = 3, emb_dim : int = 512, num_heads = 8, num_layers = 6, dropout : float = 0.0 , channel_ratio : list = 
                  [1, 2, 5], depth_ratio : float = 0.33) :
         super().__init__()
+        self.embs = Embedding(vocab_size, embedding_dim= emb_dim)                                # token embedding layer
+        self.pos_enc =  PositionalEncoding(emb_dim)                                              
         self.encoder = Encoder(c1, emb_dim, channel_ratio, depth_ratio)
-        self.decoder = Decoder(vocab_size, emb_dim, num_heads, num_layers)
+        self.decoder = Decoder(vocab_size, emb_dim, num_heads, num_layers, dropout = dropout)
         self.flatten = nn.Flatten(start_dim= 2, end_dim= -1)                                     #to flatten feature maps to one dimension
-        self.pred = Prediction_head(vocab_size, emb_dim)
+        self.pred = nn.Linear(emb_dim, vocab_size)                                               # final layer
+        #self.embs.weight = self.pred.weight                                                      # weights sharing
 
-    def forward(self, x1 : torch.Tensor, x2 : torch.Tensor, mask : torch.Tensor) :
+    def forward(self, x1 : torch.Tensor, x2 : torch.Tensor) :
         x1 = self.encoder(x1)
         x1 = self.flatten(x1)
         x1 = x1.transpose(1,-1)                                                                 #switching the channels to the last postion
-        y = self.decoder(x1, x2, mask)
+        x2 = self.pos_enc(self.embs(x2))                                                        # adding postional encoding on embeddings
+        y = self.decoder(x1, x2)
         logits = self.pred(y)
         return logits
     
@@ -68,13 +61,29 @@ class Model(nn.Module) :
         loss = torch.nn.functional.cross_entropy(x.view(B, C, T) , y)                                                   #cross-entropy loss requires B,C,T format
         return loss
 
-    '''@torch.no_grad()
-    def generate(self, x : torch.Tensor, maxlen : int = 100) :
-        x1 = torch.zeros(1,1).cuda().to(torch.uint8)
-        while 
-        x = self.forward(x1, x)
-        x = F.softmax(x)'''
-
+    @torch.no_grad()
+    def generate(self, x : torch.Tensor, tokenizer, greedy : bool = True, top_k : int = None, maxlen : int = 100) :
+        
+        indx = torch.tensor([tokenizer.start_id])
+        indx = torch.unsqueeze(0)    # indx size is (1,1)
+        
+        for _ in range(maxlen):
+            logits = self.forward(indx, x)     # forward pass          
+            # optionally crop the logits to only the top k options
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = -float('Inf')    
+            probs = F.softmax(logits, dim=-1)[0]  #s oftmax along last dim
+            if greedy :
+                idx_next = torch.argmax(probs, dim = -1)     # greedy search
+            else : 
+                idx_next = torch.multinomial(probs, num_samples=1)   # sample from the distribution
+            if idx_next.item() == tokenizer.end_id :
+                return idx
+            # append sampled index to the running sequence and continue
+            idx = torch.cat((idx, idx_next), dim=1)
+        
+        return idx
 
     def process_output(self ,x : torch.Tensor) :
         x = torch.argmax(F.softmax(x, dim= -1), dim = -1)

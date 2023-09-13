@@ -57,8 +57,10 @@ def byte_pair_encoding(data, n):
 
 
 
-files = ["data/COCO_dataset/captions_train2017.json",
-         "data/COCO_dataset/captions_val2017.json"]
+files = ["/mnt/DA149E26149E0623/data/COCO_dataset/captions_train2017.json",
+         "/mnt/DA149E26149E0623/data/COCO_dataset/captions_val2017.json"]
+
+num_merges = 2500
 
 
 all_tokens = set()
@@ -84,7 +86,7 @@ for file in files :
             all_tokens.add(x)
         data.append(words)
 
-bpe_pairs = sorted(byte_pair_encoding(data, 7500))
+bpe_pairs = sorted(byte_pair_encoding(data, num_merges))
 
 for word in bpe_pairs : 
     #word = word.replace('</w>', '')
