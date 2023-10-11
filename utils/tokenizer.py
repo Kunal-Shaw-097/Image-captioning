@@ -5,8 +5,8 @@ import re
 
 class Tokenizer:
     def __init__(self, vocab_path) -> None:
-        stream = open(vocab_path, "r")
-        self.vocab = json.load(stream)
+        with open(vocab_path, "r") as stream :
+            self.vocab = json.load(stream)
         self.len = self.vocab["vocab_size"]
         self.word_to_index = self.vocab["word_to_index"]
         self.index_to_word = self.vocab["index_to_word"]

@@ -3,42 +3,28 @@ import numpy as np
 import cv2
 
 
-def max_hw(imgs: list):
+def read(imgs: list):
     """
-    Takes in list of image names from the dataloader and return the max height and max width present in all of those images.
+    Takes in list of image names from the dataloader and reads them.
     """
-    max_h = 0
-    max_w = 0
     ims = []
     for img in imgs:
         img = cv2.imread(img)
-        h, w = img.shape[:2]
-        max_h, max_w = max(h, max_h), max(w, max_w)
         ims.append(img)
-    return ims, max_h, max_w
+    return ims
 
-
-def make_divisible(maxhw, by: int = 32):  # all images have height/width divisible by 32 to avoid encoder issues
-    max_h, max_w = maxhw[0], maxhw[1]
-    max_h = max_h - (max_h % by)
-    max_w = max_w - (max_w % by)
-    return max_h, max_w
-
-
-def process_img_batch(imgs: list):
+def process_img_batch(imgs: list, img_size : int = 512):
     """
     Takes in list of img names from the dataloader and converts them to Tensors.
     """
     y = []
-    imgs, max_h, max_w = max_hw(imgs)
-    max_h, max_w = make_divisible((max_h, max_w), 32)  # max_h and max_w should be a multiple of 32
+    imgs = read(imgs)
 
     for img in imgs:
-        img = letterbox(img, (max_h, max_w))
-        img = img.transpose(2, 0, 1)  # channel first format
+        img = letterbox(img, (img_size, img_size))
         y.append(img)
-    return torch.from_numpy(np.array(y))
-
+    
+    return y
 
 def letterbox(im, new_shape=(640, 640), color=(114, 114, 114)):
     """

@@ -1,13 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 
 
 
-# NLP
-
-class PositionalEncoding(nn.Module):
+class TextPositionalEncoding(nn.Module):
     def __init__(self, d_model: int = 512, dropout: float = 0.0, max_len: int = 256):
         super().__init__()
         position = torch.arange(max_len).unsqueeze(1)
@@ -21,230 +18,137 @@ class PositionalEncoding(nn.Module):
         # x = (B , T, emb_dim)
         x = x + self.pe[:, : x.size(1), :]
         return x
-    
-    
-    
-class Faster_Self_Attention(nn.Module) :
-    def __init__(self, emb_dim : int = 512, num_heads : int = 8, dropout : float = 0.0):
-        super().__init__()
-        assert emb_dim % num_heads == 0
-        # key, query, value projections for all heads, but in a batch
-        self.c_attn = nn.Linear(emb_dim, 3 * emb_dim, bias= False)
-        # output projection
-        self.c_proj = nn.Linear(emb_dim, emb_dim, bias= False)
-        self.num_head = num_heads
-        self.n_embd = emb_dim
-        # regularization
-        self.dropout= dropout
-        self.dropout_layer = nn.Dropout(dropout)
 
+
+class ImagePositionalEncoding(nn.Module) :
+    def __init__(self, emb_dim : int = 512,  dropout : float = 0.0, max_len : int = 512) :
+        super().__init__() 
+        self.pe = nn.Parameter(torch.zeros(1, max_len, emb_dim), requires_grad=True)
+    
+    def forward(self, x : torch.Tensor) :
+        x = x + self.pe[: ,:x.shape[1], :]
+        return x
+
+class ImageEmbedding(nn.Module):
+    def __init__(self, in_channels : int = 3, emb_dim : int = 512, patch_size : int = 64):
+        super().__init__()
+        self.patch_size = patch_size
+        self.patch = nn.Conv2d(in_channels, emb_dim, patch_size, stride=patch_size, bias = False)
+        
     def forward(self, x):
-        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
+        # Input x is an image tensor of shape (batch_size, in_channels, image_size, image_size)
+        patches = self.patch(x)  # (batch_size, in_channels, Hx, Wx)
+        B, C, H, W = patches.size()
+        patches = patches.permute(0, 2, 3, 1).contiguous()  #(B, emb_dim, H, W) to (B, H, W, emb_dim)
+        patches = patches.view(B, H * W, C)
+        return patches         
 
-        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
-        q = q.view(B, T, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
-        k = k.view(B, T, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
-        v = v.view(B, T, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
-
-        if self.training :
-            is_casual = True
-            dropout = self.dropout
-        else :
-            is_casual = False
-            dropout = 0.0
-
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p= dropout, is_causal= is_casual) 
-        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
-        
-
-        # output projection
-        y = self.c_proj(y)
-        y = self.dropout_layer(y)
-        return y
-
-class Faster_Cross_Attention(nn.Module) :
-    def __init__(self, emb_dim : int = 512, num_heads : int = 8, dropout : float = 0.0) :
+class Multi_head_Attention(nn.Module) :
+    def __init__(self, emb_dim : int = 512, num_heads : int = 8, dropout : float = 0.0, is_causal : bool = True) :
         super().__init__()
-        # query value for x1 for all heads
+        assert emb_dim % num_heads == 0, "The emb_dim must be divisible by the num_heads"
+        # query, key , value value for x1, x2, x3 for all heads
         self.q = nn.Linear(emb_dim, emb_dim, bias = False)
-        # key, value from x2 for all heads
-        self.kv = nn.Linear(emb_dim, 2*emb_dim, bias = False)
+        self.k= nn.Linear(emb_dim, emb_dim, bias = False)
+        self.v= nn.Linear(emb_dim, emb_dim, bias = False)
         self.c_proj = nn.Linear(emb_dim, emb_dim, bias= False)
         # regularization
         self.num_head = num_heads
         self.n_embd = emb_dim
         self.dropout= dropout
         self.dropout_layer = nn.Dropout(dropout)
+        self.is_causal = is_causal
     
-    def forward(self, x1 : torch.Tensor, x2 : torch.Tensor):
+    def forward(self, x1 : torch.Tensor, x2 : torch.Tensor, x3 : torch.Tensor):
         B, T1, C = x1.size() # batch size, sequence length, embedding dimensionality (n_embd)
-        B, T2, C = x2.size() # batch size, image_size/32(enocder output length) , embedding dimensionality (n_embd)
+        B, T2, C = x2.size() # batch size, encoded img length, embedding dimensionality (n_embd)
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        q= self.q(x1)
-        k, v = self.kv(x2).split(self.n_embd, dim=2)
-        q = q.view(B, T1, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
-        k = k.view(B, T2, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
-        v = v.view(B, T2, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T, hs)
+        q = self.q(x1)
+        k = self.k(x2)
+        v = self.v(x3)
+        q = q.view(B, T1, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T1, hs)
+        k = k.view(B, T2, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T2, hs)
+        v = v.view(B, T2, self.num_head, C // self.num_head).transpose(1, 2) # (B, nh, T2, hs)
         if self.training :
             dropout = self.dropout
         else :
             dropout = 0.0
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p= dropout ,is_causal= False) 
-        y = y.transpose(1, 2).contiguous().view(B, T1, C) # re-assemble all head outputs side by side
-        
+        # cross-attention; cross-attend: (B, nh, T1, hs) x (B, nh, hs, T2) -> (B, nh, T1, T2) x (B, nh, T2, hs) -> (B, nh, T1, hs)
+        y = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p= dropout ,is_causal= self.is_causal) 
+        y = y.transpose(1, 2).contiguous().view(B, T1, C) # re-assemble all head outputs side by side      
 
         # output projection
         y = self.c_proj(y)
         y = self.dropout_layer(y)
         return y
 
-
-
-class FeedForward(nn.Module):
-    def __init__(self, emb_dim: int = 512):
+'''class FeedForward(nn.Module):
+    def __init__(self, emb_dim: int = 512, dropout : float = 0.0):
         super().__init__()
-        self.ext = nn.Linear(emb_dim, emb_dim * 4)
-        self.proj = nn.Linear(emb_dim * 4, emb_dim)
+        hidden_dim = emb_dim * 4
+        self.w1 = nn.Linear(emb_dim, hidden_dim, bias = False)
+        self.w2 = nn.Linear(emb_dim, hidden_dim, bias = False)
+        self.w3 = nn.Linear(hidden_dim, emb_dim, bias = False)
         self.act = nn.GELU()
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor):
         # x = B, T, emb_dim
-        x = self.ext(x)   # (B, T, 4 * emb_dim) 
-        x = self.act(x)  
-        x = self.proj(x)  # back to (B, T, emb_dim)
+        return self.dropout(self.w3(self.act(self.w1(x)) * self.w2(x)))'''
+    
+class FeedForward(nn.Module):
+    def __init__(self, emb_dim: int = 512, dropout : float = 0.0):
+        super().__init__()
+        hidden_dim = emb_dim * 4
+        self.w1 = nn.Linear(emb_dim, hidden_dim, bias = False)
+        self.act = nn.GELU()
+        self.w2 = nn.Linear(hidden_dim, emb_dim, bias = False)
+        self.dropout= nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor):
+        # x = B, T, emb_dim
+        return self.dropout(self.w2(self.act(self.w1(x))))  
+ 
+class Encoder_block(nn.Module) :
+    def __init__(self, emb_dim : int = 512, num_head : int = 8, dropout : float = 0.0):
+        super().__init__()
+        self.self_attn = Multi_head_Attention(emb_dim, num_head, dropout, is_causal = False)
+        self.self_attn_ln = nn.LayerNorm(emb_dim)
+        self.ff = FeedForward(emb_dim, dropout)
+        self.ff_ln = nn.LayerNorm(emb_dim)
+    
+    def forward(self, x : torch.Tensor) :
+        z = self.self_attn_ln(x)
+        x = x + self.self_attn(z, z ,z)
+        z = self.ff_ln(x)
+        x = x + self.ff(z)
         return x
-
-
-'''class Attention_head(nn.Module):
-    def __init__(self, emb_dim: int = 512, num_head: int = 8):
-        super().__init__()
-        assert (
-            emb_dim % num_head == 0
-        ), "Number of head should be a factor of Embedding dimension"
-
-        self.head_dim = int(emb_dim / num_head)
-
-        self.q = nn.Linear(emb_dim, self.head_dim, bias=False)
-        self.k = nn.Linear(emb_dim, self.head_dim, bias=False)
-        self.v = nn.Linear(emb_dim, self.head_dim, bias=False)
-
-
-class Self_Attention_head(Attention_head):
-    def __init__(self, emb_dim: int = 512, num_head: int = 8):
-        super().__init__(emb_dim, num_head)
-
-    def forward(self, x1: torch.Tensor, mask: torch.Tensor):
-        # x.size = (B, T, emb_size)
-        q, k, v = (
-            self.q(x1),
-            self.k(x1),
-            self.v(x1),
-        )  # all (B, T, head_dim)
-
-        qk = q @ k.transpose(-1, -2)  # (B , T , T)
-        scaled_qk = qk / self.head_dim**0.5  # scaling
-        
-        if self.training :
-            scaled_qk = scaled_qk.masked_fill(
-                mask == 0, float("-inf")
-            )  # applying the above matrix as mask over batches
-        softmax_qk = F.softmax(scaled_qk, dim=-1)  # softmax
-
-        qkv = softmax_qk @ v  #  (B, T, head_dim)
-
-        return qkv
-
-
-class Cross_Attention_head(Attention_head):
-    def __init__(self, emb_dim: int = 512, num_head: int = 8):
-        super().__init__(emb_dim, num_head)
-
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
-        q, k, v = (
-            self.q(x1),
-            self.k(x2),
-            self.v(x2),
-        )  # q = (B, T, head_dim), k=v=(B, T', head_dim)
-
-        qk = q @ k.transpose(-1, -2)  # (B , T , T')
-        scaled_qk = qk / self.head_dim**0.5  # scaling
-
-        softmax_qk = F.softmax(scaled_qk, dim=-1)  # softmax
-
-        qkv = softmax_qk @ v  #  (B, T, head_dim)
-
-        return qkv
-
-class Multi_head_Attention(nn.Module):
-    def __init__(self, emb_dim: int = 512, num_heads: int = 8, self_attn: bool = True):
-        super().__init__()
-        if self_attn:
-            self.heads = nn.ModuleList(
-                [Self_Attention_head(emb_dim, num_heads) for i in range(num_heads)]
-            )
-        else:
-            self.heads = nn.ModuleList(
-                [Cross_Attention_head(emb_dim, num_heads) for i in range(num_heads)]
-            )
-
-
-class Self_Multi_head_Attention(Multi_head_Attention):
-    def __init__(self, emb_dim: int = 512, num_heads: int = 8):
-        super().__init__(emb_dim, num_heads, True)
-
-    def forward(self, x1: torch.Tensor, mask: torch.Tensor = None):
-        # x = (B, T, emb_dim)
-        out = []
-
-        for head in self.heads:
-            out.append(head(x1, mask))  # Each item is (B, T, emb_dim/num_heads)
-
-        out = torch.cat(out, dim=-1)  # Concat all to make (B, T, emb_dim)
-        return out
-
-
-class Cross_Multi_head_Attention(Multi_head_Attention):
-    def __init__(self, emb_dim: int = 512, num_heads: int = 8):
-        super().__init__(emb_dim, num_heads, False)
-
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
-        # x = (B, T, emb_dim)
-        out = []
-
-        for head in self.heads:
-            out.append(head(x1, x2))  # Each item is (B, T, emb_dim/num_heads)
-
-        out = torch.cat(out, dim=-1)  # Concat all to make (B, T, emb_dim)
-        return out'''
 
 
 class decoder_block(nn.Module):
     def __init__(self, emb_dim: int = 512, num_heads: int = 8, dropout : float = 0.0):
         super().__init__()
-        self.mha = Faster_Self_Attention(emb_dim, num_heads, dropout= dropout)  # self-attention
-        self.cha = Faster_Cross_Attention(emb_dim, num_heads, dropout= dropout) # cross-attention
-        self.layer_norm = nn.LayerNorm(emb_dim)
-        self.ff = FeedForward(emb_dim)
+        self.self_attn = Multi_head_Attention(emb_dim, num_heads, dropout= dropout, is_causal= True)                        # self-attention
+        self.cross_attn = Multi_head_Attention(emb_dim, num_heads, dropout= dropout, is_causal = False)                     # cross-attention
+        self.self_attn_ln = nn.LayerNorm(emb_dim)
+        self.cross_attn_ln = nn.LayerNorm(emb_dim)
+        self.ff_ln = nn.LayerNorm(emb_dim)
+        self.ff = FeedForward(emb_dim, dropout= dropout)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor):
-        out1 = self.mha(x1)
-        out1 = self.layer_norm(x1 + out1)
-    
-        out2 = self.cha(out1, x2)
-        out2 = self.layer_norm(out1 + out2)
-    
-        out3 = self.ff(out2)
-        out3 = self.layer_norm(out2 + out3)
-        return out3
+        z = self.self_attn_ln(x1)
+        x = x1 + self.self_attn(z, z, z)
+        z = self.cross_attn_ln(x)
+        x = x + self.cross_attn(z, x2, x2)
+        z = self.ff_ln(x)
+        x = x + self.ff(z)
+        return x
 
 
-# CV
 
 
-def autopad(k, p=None):  # kernel, padding
+
+'''def autopad(k, p=None):  # kernel, padding
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
@@ -324,10 +228,10 @@ class SPPF(nn.Module):
 
 
 class encoder_backbone_down(nn.Module):
-    def __init__(self, c1: int = 3, c2: int = 512, depth_ratio=0.33):
+    def __init__(self, c1: int = 3, c2: int = 512, depth_ratio= 0.33):
         """This backbone is used in yolov5, depth ratio and c2 makes the difference between yolov5 small, medium and large models"""
         super().__init__()
-        self.conv1 = Conv(c1, c2 // 16, k=6, s=2, p=2)
+        self.conv1 = Conv(c1, c2 // 16, k=7, s=2, p=3)
         self.conv2 = Conv(c2 // 16, c2 // 8, k=3, s=2)
         self.conv3 = Conv(c2 // 8, c2 // 4, k=3, s=2)
         self.conv4 = Conv(c2 // 4, c2 // 2, k=3, s=2)
@@ -404,14 +308,103 @@ class encoder_head(nn.Module):
         self.ratio = [(c // sum(ratio)) * k for k in ratio]
 
         self.conv1 = nn.Sequential(
-            Conv(c // 4, self.ratio[0], k=3, s=2),
-            Conv(self.ratio[0], self.ratio[0], k=3, s=2),
+            nn.Conv2d(c // 4, c//2, kernel_size=3, stride=2, padding= 1, bias= False),
+            nn.Conv2d(c//2, self.ratio[0], kernel_size=3, stride=2, padding= 1, bias= False),
         )
-        self.conv2 = Conv(c // 2, self.ratio[1], k=3, s=2)
-        self.conv3 = Conv(c, self.ratio[2])
+        self.conv2 = nn.Conv2d(c // 2, self.ratio[1], kernel_size=3, stride=2, padding= 1, bias= False)
+        self.conv3 = nn.Conv2d(c, self.ratio[2], kernel_size=1, stride= 1, bias= False)
+        self.bn = nn.BatchNorm2d(c)
+        self.act = nn.SiLU()
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor, x3: torch.Tensor):
         y1 = self.conv1(x1)
         y2 = self.conv2(x2)
         y3 = self.conv3(x3)
-        return torch.cat([y1, y2, y3], dim=1)
+        return self.act(self.bn(torch.cat([y1, y2, y3], dim=1)))
+    
+
+class Yolov5_Encoder(nn.Module) :
+    def __init__(self, c1 : int = 3, c2 : int = 512, ratio : list = [1, 2, 5], depth_ratio : float = 0.33) :
+        super().__init__()
+        assert c2 % 32 == 0 , "embedding dim must be a multiple of 32"
+        self.block1 = encoder_backbone_down(c1, c2, depth_ratio)
+        self.block2 = encoder_backbone_up(c2, depth_ratio)
+        self.block3 = encoder_head(c2, ratio)
+
+    def forward(self, x : torch.Tensor) :
+        x1, x2, x3 = self.block1(x)
+        x1, x2, x3 = self.block2(x1, x2, x3)
+        y = self.block3(x1, x2, x3)
+        return y
+
+class CSPDenseNet_encoder(nn.Module) :
+    def __init__(self, c1 , c2) :
+        super().__init__()  
+        growth_rate = c2//16
+        in_channels = c2//8
+        num_layers = [6, 12, 24]
+
+        self.conv1 = nn.Conv2d(c1 , in_channels, kernel_size= 7, stride= 2, padding= 3, bias= False)
+        self.maxpool = nn.MaxPool2d(2, 2)
+        self.blocks = nn.ModuleList()
+        for i, _ in enumerate(num_layers):
+            self.blocks.append(CSPDenseblock(in_channels, growth_rate, _)) 
+            in_channels = in_channels + (growth_rate * _)
+            if i < len(num_layers) - 1 :
+                self.blocks.append(Transitionlayer(in_channels, in_channels//2))
+                in_channels = in_channels//2
+        self.final_layer = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels//2, kernel_size= 1, stride= 1, bias= False),
+            nn.AdaptiveAvgPool2d((5,5))
+        ) 
+        
+    def forward(self, x : torch.Tensor) :
+        x = self.conv1(x)
+        x = self.maxpool(x)
+        for block in self.blocks :
+            x = block(x)   
+        return self.final_layer(x)
+    
+class Denselayer(nn.Module) :
+    def __init__(self, c1 , c2) :
+        super().__init__()
+        self.conv = nn.Conv2d(c1, c2, kernel_size= 3, padding= 1, bias= False)
+        self.bn = nn.BatchNorm2d(c1)
+        self.act = nn.SiLU()
+    
+    def forward(self, x : torch.Tensor) :
+        return self.conv(self.act(self.bn(x)))
+    
+class Transitionlayer(nn.Module) :
+    def __init__(self, c1, c2) :
+        super().__init__()
+        self.bottleneck = nn.Conv2d(c1, c2, kernel_sizclass Patch_image(nn.Module) :
+    def __init__(self, c1 : int = 3, c2 : int = 512, ) -> None:
+        super().__init__()
+class Denseblock(nn.Module) :            
+    def __init__(self, c1, growth_rate, num_layers):
+        super().__init__()
+        self.layers= nn.ModuleList()
+        c_in = c1
+        for _ in range(num_layers) :
+            self.layers.append(Denselayer(c_in, growth_rate))
+            c_in += growth_rate 
+
+    def forward(self, x : torch.Tensor) :
+        for layer in self.layers :
+            y = layer(x)
+            x = torch.cat([x, y], dim = 1)
+        return x
+
+class CSPDenseblock(nn.Module) :   #Cross Stage Partial network implementation of Denseblock
+    def __init__(self, c1, growth_rate, num_layers) :
+        super().__init__()
+        self.c_in  = c1
+        self.Dense = Denseblock(self.c_in//2, growth_rate, num_layers)
+    
+    def forward(self, x : torch.Tensor) :
+        x1, x2 = x.split(self.c_in//2, dim= 1)
+        x2 = self.Dense(x2)
+        x = torch.cat([x1, x2], dim = 1)
+        return x
+        '''
