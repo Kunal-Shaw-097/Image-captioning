@@ -13,7 +13,8 @@ def resume_checkpoint(path, tokenizer, resume_weight_only : bool = True) :
     start_epoch = ckpt["epoch"] + 1
     num_epochs= scheduler.total_epochs
     train_losses, val_losses = ckpt["train_losses"], ckpt['val_losses']
-    return model, ckpt["model_args"], optimizer, scheduler, start_epoch, num_epochs, train_losses, val_losses
+    model_args = ckpt["model_args"]
+    return model, model_args, optimizer, scheduler, start_epoch, num_epochs, train_losses, val_losses
 
 def strip_weight(path):
     ckpt = torch.load(path)

@@ -35,7 +35,7 @@ class COCO_Dataset(Dataset) :
             image_id = obj["image_id"]
             x.append(os.path.join(image_root_path, f"{image_id:012d}.jpg"))
             y.append(obj["caption"])
-        return x, y
+        return np.array(x), np.array(y)
     
     def __len__(self) :
         return self.n
@@ -58,7 +58,8 @@ class COCO_Dataset(Dataset) :
         input_y , target_y = y[: , :-1].contiguous(), y[:,1:].contiguous()
         return x, input_y, target_y         # return img, input encoded sentences, target encoded sentences
     
-class ConceptualCaptions_dataset(COCO_Dataset):
+    
+class Custom_Captions_dataset(COCO_Dataset):
     def __init__(self, img_root_path, caption_path, vocab_path, img_size : int = 512, transform: bool = False):
         super().__init__(img_root_path, caption_path, vocab_path, img_size, transform)
     
@@ -71,7 +72,7 @@ class ConceptualCaptions_dataset(COCO_Dataset):
             image_id = obj["image_id"]
             x.append(os.path.join(image_root_path, image_id))
             y.append(obj["caption"])
-        return x, y
+        return np.array(x), np.array(y)
 
     
 
@@ -94,7 +95,7 @@ class Flicker30_dataset(Dataset):
         data = pd.read_csv(caption_path, delimiter= "|")
         x = [os.path.join(image_dir, i ) for i in data["image_name"].to_list()]
         y = data["comment"].to_list()
-        return x, y 
+        return np.array(x), np.array(y) 
     
     def __len__(self) :
         return self.n
