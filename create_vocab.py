@@ -2,7 +2,7 @@ import json
 import re
 from collections import defaultdict
 from tqdm import tqdm
-import os
+import pandas as pd
 
 
 def get_vocab(data):
@@ -57,10 +57,13 @@ def byte_pair_encoding(data, n):
 
 
 
-files = ["/mnt/DA149E26149E0623/data/COCO_dataset/captions_train2017.json",
-         "/mnt/DA149E26149E0623/data/COCO_dataset/captions_val2017.json"]
+files = ["data/COCO_dataset/captions_train2017.json",
+         "data/COCO_dataset/captions_val2017.json",
+         "data/conceptual_captions/final_captions.json",
+         "data/Pascal_sentence/captions.json",
+         "data/Flicker30_dataset/captions.csv"]
 
-num_merges = 2500
+num_merges = 10000
 
 
 all_tokens = set()
@@ -72,24 +75,37 @@ index_to_word = {}
 data = []
 
 for file in files :
+    if file.endswith(".json") : 
+        with open(file, 'r') as f : 
+            caption_dict = json.load(f)
+        
+        if "annotations" in caption_dict :
+            caption_dict = caption_dict["annotations"]
+    
+        for obj in caption_dict :
+            caption = obj["caption"]
+            #dont need spaces and special chars in BPE
+            words = list(filter( lambda x : x not in [None, "", " "] , re.split("\s+|\W+", caption)))   
+            #adding special chars to vocab      
+            for x in list(filter(lambda x : x != " ", re.findall("\W{1}", caption))) :                  
+                all_tokens.add(x)
+            data.append(words)
 
-    with open(file, 'r') as f : 
-        caption_dict = json.load(f)
-        caption_dict = caption_dict["annotations"]
+    elif file.endswith(".csv") :
+        captions = pd.read_csv(file, delimiter= "|")
+        captions = captions["comment"].to_list()
 
-    for obj in caption_dict :
-        caption = obj["caption"]
-        #dont need spaces and special chars in BPE
-        words = list(filter( lambda x : x not in [None, "", " "] , re.split("\s+|\W+", caption)))   
-        #adding special chars to vocab      
-        for x in list(filter(lambda x : x != " ", re.findall("\W{1}", caption))) :                  
-            all_tokens.add(x)
-        data.append(words)
+        for i,caption in enumerate(captions) :
+            words = list(filter( lambda x : x not in [None, "", " "] , re.split("\s+|\W+", caption)))   
+            #adding special chars to vocab      
+            for x in list(filter(lambda x : x != " ", re.findall("\W{1}", caption))) :                  
+                all_tokens.add(x)
+            data.append(words)
+
 
 bpe_pairs = sorted(byte_pair_encoding(data, num_merges))
 
 for word in bpe_pairs : 
-    #word = word.replace('</w>', '')
     for token in word.split() :
         all_tokens.add(token)
 

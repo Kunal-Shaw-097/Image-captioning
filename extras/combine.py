@@ -2,8 +2,8 @@ import json
 import os
 from pathlib import Path
 
-captions_dir = "data/conceptual_captions"
-save_json = os.path.join(captions_dir, "final_captions.json")
+captions_dir = "data/Pascal_sentence"
+save_json = os.path.join(captions_dir, "captions.json")
 
 
 if Path(save_json).exists() :
