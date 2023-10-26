@@ -3,27 +3,26 @@ import numpy as np
 import cv2
 
 
-def read(imgs: list):
+def read(ims: list):
     """
     Takes in list of image names from the dataloader and reads them.
     """
-    ims = []
-    for img in imgs:
-        img = cv2.imread(img)
-        ims.append(img)
-    return ims
+    imgs = []
+    for im in ims:
+        img = cv2.imread(im)
+        imgs.append(img)
+    return imgs
 
-def process_img_batch(imgs: list, img_size : int = 512):
+def process_img_batch(ims: list, img_size : int = 640):
     """
     Takes in list of img names from the dataloader and converts them to Tensors.
     """
     y = []
-    imgs = read(imgs)
+    imgs = read(ims)
 
     for img in imgs:
         img = letterbox(img, (img_size, img_size))
         y.append(img)
-    
     return y
 
 def letterbox(im, new_shape=(640, 640), color=(114, 114, 114)):
