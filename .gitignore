@@ -1,6 +1,13 @@
 __pycache__/
 .vscode/
-data/
 log/
 *.npy
 *.jpg
+*.jpeg
+*.png
+*.webp
+*.json
+*.csv
+*.pt
+*.parquet
+!vocab.json
