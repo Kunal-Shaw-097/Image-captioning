@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
-from utils.dataloader import COCO_Dataset, Flicker30_dataset, Custom_Captions_dataset
+from utils.dataloader import COCO_Dataset, Flicker30_dataset, Custom_Captions_dataset, Chunks
 from utils.tokenizer import Tokenizer
 from utils.model import Model
 from utils.general import Custom_LinearScheduler, resume_checkpoint, strip_weight
@@ -32,7 +32,7 @@ COCO_val_img_root_path = "data/COCO_dataset/val2017"
 
 COCO_train_caption_path = "data/COCO_dataset/captions_train2017.json"
 Flicker_train_caption_path = "data/Flicker30_dataset/captions.csv"
-ConceptaulCaptions_caption_path = "data/conceptual_captions/final_captions.json"
+ConceptaulCaptions_caption_path = "data/conceptual_captions/captions.json"
 PascalSentence_caption_path = "data/Pascal_sentence/captions.json"
 COCO_val_caption_path = "data/COCO_dataset/captions_val2017.json"
 
@@ -41,7 +41,7 @@ vocab_path = "vocab.json"
 
 model_save_dir =Path(__file__).parent / "saved_model"
 
-resume_checkpoint_path = "saved_model/epoch5.pt"
+resume_checkpoint_path = "saved_model/pretrained_3_ct/epoch_v2.pt"
 resume_training = True
 resume_weight_only = True
 
@@ -53,9 +53,9 @@ batch_size = 32
 gradient_accumulation_steps = 8
 num_epochs = 3
 
-initial_lr = 1e-5   # starting learning rate
+initial_lr = 2e-5   # starting learning rate
 min_lr = 1e-5       # lowest learning rate
-warmup_steps = 10000
+warmup_steps = 10
 
 model_args = {
 
@@ -79,11 +79,7 @@ if __name__ == "__main__" :
     
    
     val_dataset = COCO_Dataset(COCO_val_img_root_path, COCO_val_caption_path, vocab_path)
-    train_dataset = ConcatDataset([COCO_train_dataset, Flicker_train_dataset, PascalSentence_dataset, ConceptualCaptions_train_dataset])
-
-    train_dataloader = DataLoader(
-        train_dataset, pin_memory= True, batch_size= batch_size,
-        shuffle= True, num_workers= num_workers, collate_fn= COCO_train_dataset.custom_collate_fn)
+    train_dataset = ConcatDataset([COCO_train_dataset, Flicker_train_dataset, PascalSentence_dataset, ConceptualCaptions_train_dataset])   
 
     val_dataloader = DataLoader(
         val_dataset, pin_memory= True,batch_size= batch_size,
@@ -114,64 +110,70 @@ if __name__ == "__main__" :
     
     scaler = torch.cuda.amp.GradScaler(enabled= True)
     
-    train_steps = len(train_dataloader)
+    train_steps = len(train_dataset)//batch_size
     val_steps = len(val_dataloader) 
 
-    '''for name ,p in model.named_parameters() :
-        if p.requires_grad :
-            print(f"{name} : {p.numel()}")
-    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
-    exit()
-    '''
-
     for _ in range(start_epoch, num_epochs + 1): 
+
+        i = 0
         
         train_totol_loss= 0
         val_total_loss = 0
         
         model.train()
-        train_pbar = tqdm(enumerate(train_dataloader), total = train_steps, bar_format= TQDM_BAR_FORMAT)
+        train_pbar = tqdm(total = train_steps, bar_format= TQDM_BAR_FORMAT, colour= "#00ff00")
 
         lr = scheduler.get_lr(_)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
+
+        train_dataset_chunks = Chunks(train_dataset)
+        train_dataset_iterable = iter(train_dataset_chunks)
+
+        for c in range(len(train_dataset_chunks.lengths)) :
+
+            train_dataloader = DataLoader(
+                next(train_dataset_iterable), pin_memory= True, batch_size= batch_size,
+                shuffle= True, num_workers= num_workers, collate_fn= COCO_train_dataset.custom_collate_fn)
         
-        for i, batch in train_pbar:
+            for batch in train_dataloader:
 
-            if i < warmup_steps and _ == 1 :
-                lr = scheduler.get_warmup_lr(i + 1)
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = lr
+                if i < warmup_steps and _ == 1 :
+                    lr = scheduler.get_warmup_lr(i + 1)
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = lr
 
-            x , y, target = batch
-            x = x.cuda(non_blocking=True).float()/255
-            y = y.cuda(non_blocking=True)
-            target = target.cuda(non_blocking=True)
-        
-            with torch.cuda.amp.autocast(dtype= torch.bfloat16): 
-                output, loss = model(x, y, target)
-                loss = loss/gradient_accumulation_steps
-
-            scaler.scale(loss).backward()
-
-            '''if i != 0 and i % 1000 == 0 :
-                print(tokenizer.decode(target))
-                print(tokenizer.decode(model.process_output(output)))'''
+                x , y, target = batch
+                x = x.cuda(non_blocking=True).float()/255
+                y = y.cuda(non_blocking=True)
+                target = target.cuda(non_blocking=True)
             
-            if (i + 1) % gradient_accumulation_steps == 0 or i == train_steps -1 :
+                with torch.cuda.amp.autocast(dtype= torch.bfloat16): 
+                    output, loss = model(x, y, target)
+                    loss = loss/gradient_accumulation_steps
 
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                scaler.scale(loss).backward()
 
-                scaler.step(optimizer)
-                scaler.update()
+                '''if i != 0 and i % 1000 == 0 :
+                    print(tokenizer.decode(target))
+                    print(tokenizer.decode(model.process_output(output)))'''
                 
-                optimizer.zero_grad()
+                if (i + 1) % gradient_accumulation_steps == 0 or i == train_steps -1 :
 
-            loss= loss.item()
-            train_totol_loss += loss
-            avg_train_loss = train_totol_loss/(i + 1)
-            train_pbar.set_description(f"TRAINING Epoch {_} : Average loss : {avg_train_loss:03f}, loss : {loss:03f}")
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+                    scaler.step(optimizer)
+                    scaler.update()
+                    
+                    optimizer.zero_grad()
+                
+                i += 1
+                train_pbar.update(1)
+                loss= loss.item()
+                train_totol_loss += loss
+                avg_train_loss = train_totol_loss/(i + 1)
+                train_pbar.set_description(f"TRAINING Epoch {_} : Average loss : {avg_train_loss:03f}, loss : {loss:03f}")
 
         model.eval()
         val_pbar = tqdm(enumerate(val_dataloader), total = val_steps, bar_format= TQDM_BAR_FORMAT)
