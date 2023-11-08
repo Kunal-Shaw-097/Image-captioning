@@ -1,0 +1,61 @@
+
+body{
+    background-image: linear-gradient(to bottom, #000000, #0e0c0b, #171413, #1d1b18, #22231e);
+}
+
+h1{
+    color: rgb(255, 255, 255);
+    text-align: center;
+}
+
+h2{
+    text-align: left;
+    margin : 2% 5% 0 5%;
+}
+
+div{
+    display: block;
+    color: white;
+}
+
+form{
+    text-align: center;
+}
+
+#top{
+    margin : 0% 5% 5% 5%;
+    height: 500px;
+}
+
+#bottom{
+    margin : 5%;
+    height: 250px;
+}
+
+#txt_box{
+    margin : 1% 5% 5% 5%;
+    text-align: center;
+    border: solid;
+    border-width: 1px;
+    border-color: grey;
+    border-radius: 5%;
+    height: 42px;
+    font-size: 32px;
+    padding: 0.5%;
+}
+
+#canvas{
+    text-align: center;
+    border-top : solid;
+    border-bottom : solid;
+    border-radius: 5%;
+    margin : 2% 5% 2% 5%;
+    height : 500px;
+    padding : 1% 5% 1% 5%;
+}
+
+#canv1{
+    max-height: 540px;
+    max-width: 540px;
+}
+

@@ -1,0 +1,47 @@
+<!-- <!DOCTYPE html>
+<html>
+<head>
+    <title>Image Upload</title>
+</head>
+<body>
+    <h1>Upload an Image</h1>
+    <form method="POST" enctype="multipart/form-data" action="/upload">
+        <input type="file" name="image">
+        <input type="submit" value="Upload">
+    </form>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="{{url_for('static', filename='styles.css')}}">
+        <script src="{{url_for('static', filename='SimpleImage.js')}}"></script>
+        <script src="{{url_for('static', filename='scp.js')}}"></script>  
+    </head>
+    <body>
+        <h1>Image Caption Generator</h1>
+        <div id="top">
+            <div id="canvas">
+                <canvas id="canv1"></canvas>
+            </div>
+            <form method="POST" enctype="multipart/form-data" action="/upload">
+                ImageName:
+                <input type="file" name="image" multiple="false" accept="image/*" id=finput onchange=display()>
+                <input type="submit" value="Generate">
+            </form>
+        </div>
+        <div id="bottom">
+            <h2>Generated Caption :</h2>
+            <div id="txt_box">
+                {% if caption %}
+                {{caption}}
+                {% endif %}
+            </div>
+        </div>
+    </body>
+</html>
+
+
+
+
