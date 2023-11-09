@@ -3,7 +3,13 @@
 {
 	"name": "Image captioning",
 
-	"image": "kshaw097/imgcap:latest",
+	"build": {
+		// Sets the run context to one level up instead of the .devcontainer folder.
+		"context": "..",
+		// Update the 'dockerFile' property if you aren't using the standard 'Dockerfile' filename.
+		"dockerfile": "../Dockerfile"
+	},
+
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 

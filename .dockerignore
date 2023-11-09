@@ -10,5 +10,3 @@ saved_model/
 *.webm
 test.py
 summary.py
-
-!saved_model/best.pt

@@ -15,7 +15,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \ 
     python -m pip install -r requirements.txt 
 
-RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6 curl -y
+
+RUN mkdir saved_model
+
+RUN curl -L 'https://drive.google.com/uc?export=download&id=1ntWCdcCGJjzbkCe2kM_ehk8riYP4xlmm&confirm=t' > saved_model/best.pt
 
 # Expose the port that the application listens on.
 EXPOSE 5000
