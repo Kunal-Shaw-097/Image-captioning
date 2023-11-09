@@ -55,8 +55,8 @@ class Model(nn.Module) :
         return logits, loss       
 
     @torch.no_grad()
-    def generate(self, x : torch.Tensor, tokenizer, greedy : bool = True, top_k : int = None, maxlen : int = 100) :
-        indx = torch.tensor([tokenizer.start_id]).cuda()
+    def generate(self, x : torch.Tensor, tokenizer, device : str = 'cuda', greedy : bool = True, top_k : int = None, maxlen : int = 100) :
+        indx = torch.tensor([tokenizer.start_id]).to(device)
         indx = indx.unsqueeze(0)    # indx size is (1,1)
 
         for _ in range(maxlen):

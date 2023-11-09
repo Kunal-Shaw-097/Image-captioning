@@ -1,9 +1,9 @@
 import torch
 from utils.model import Model
 
-def resume_checkpoint(path, tokenizer, resume_weight_only : bool = True) :
-    ckpt = torch.load(path)
-    model = Model(len(tokenizer), **ckpt["model_args"]).cuda()
+def resume_checkpoint(path, tokenizer, resume_weight_only : bool = True, device : str = 'cuda') :
+    ckpt = torch.load(path, map_location=device)
+    model = Model(len(tokenizer), **ckpt["model_args"]).to(device)
     model.load_state_dict(ckpt["model"])
     if resume_weight_only :
         return model

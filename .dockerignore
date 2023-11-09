@@ -1,0 +1,14 @@
+data/
+.devcontainer/
+__pycache__/
+extras/
+saved_model/
+*.pt
+*.png
+*.jpg
+*.jpeg
+*.webm
+test.py
+summary.py
+
+!saved_model/best.pt
