@@ -39,7 +39,6 @@ def upload_image():
     if image:
         file_bytes = np.frombuffer(image.read(), np.uint8)
         img = cv2.imdecode(file_bytes,  cv2.IMREAD_COLOR)
-        print(img.shape)
         img = letterbox(img, (480,480))
         img_in = torch.from_numpy(img).to(device).unsqueeze(0).permute(0, 3, 1, 2).contiguous().float()/255
         pred = model.generate(img_in, tokenizer, device=device, greedy= True, top_k=5)
