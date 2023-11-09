@@ -24,12 +24,10 @@ form{
 
 #top{
     margin : 0% 5% 5% 5%;
-    height: 500px;
 }
 
 #bottom{
     margin : 5%;
-    height: 250px;
 }
 
 #txt_box{
@@ -50,11 +48,11 @@ form{
     border-bottom : solid;
     border-radius: 5%;
     margin : 2% 5% 2% 5%;
-    height : 500px;
+    height : 640px;
 }
 
 #canv1{
-    margin : 5% 0 0 0;
+    margin : 5% 0 1% 0;
     max-height: 540px;
     max-width: 540px;
 }
