@@ -5,22 +5,14 @@ import numpy as np
 from utils.tokenizer import Tokenizer
 from utils.general import resume_checkpoint
 from utils.process_image import letterbox
-
-
+from pathlib import Path
+import os
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 app = Flask(__name__, static_folder="static/")
 vocab_path = "vocab.json"
 model_path = "saved_model/best.pt"
-
-# Configuration for file uploads
-UPLOAD_FOLDER = 'images/uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-tokenizer = Tokenizer(vocab_path)
-model = resume_checkpoint(model_path, tokenizer, device=device)
-model.eval()
 
 @app.route('/')
 def home():
@@ -45,23 +37,17 @@ def upload_image():
         caption = tokenizer.decode(pred)
         return render_template("upload.html", caption = caption[0])
 
-@app.route('/generate', methods=['POST'])
-def aupload_image():
-    if 'image' not in request.files:
-        return "No image file provided"
-
-    image = request.files['image']
-
-    if image.filename == '':
-        return "No selected file"
-
-    if image:
-        image.save(f"{app.config['UPLOAD_FOLDER']}/{image.filename}")
-        return f"Image uploaded successfully: {image.filename}"
-
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
+    if Path("saved_model/best.pt").exists() == False :
+        Path("saved_model/").mkdir(parents= True, exist_ok= True)
+        os.system("curl -L 'https://drive.google.com/uc?export=download&id=1ntWCdcCGJjzbkCe2kM_ehk8riYP4xlmm&confirm=t' > saved_model/best.pt")
+
+    tokenizer = Tokenizer(vocab_path)
+    model = resume_checkpoint(model_path, tokenizer, device=device)
+    model.eval()
+
     app.run(host='0.0.0.0', debug=False)
