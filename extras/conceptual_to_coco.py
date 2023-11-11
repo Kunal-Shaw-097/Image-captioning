@@ -12,9 +12,8 @@ import aiohttp
 from tqdm import tqdm
 
 
-parquet_file_path = "data/0000.parquet"
-image_save_dir = Path("data/conceptual_captions/images")
-num_images = 1500000
+parquet_file_path = "Parquets/0000.parquet"
+image_save_dir = Path("data/lian_coco_1/images")
 image_per_batch = 10000
 
 
@@ -33,13 +32,16 @@ async def download_image(session, semaphore, x, retries = 0) :
                 if response.status == 200:
                     image_data = await response.read()
                     image = Image.open(io.BytesIO(image_data))
-                    img_name = f"{uuid4()}.jpg"
-                    image = image.save(image_save_dir / img_name)
-                    temp = {
-                        "image_id" : img_name,
-                        "caption" : caption
-                    }
-                    return temp
+                    if max(image.size) > 200 :
+                        img_name = f"{uuid4()}.jpg"
+                        image = image.save(image_save_dir / img_name)
+                        temp = {
+                            "image_id" : img_name,
+                            "caption" : caption
+                        }
+                        return temp
+                    else :
+                        return
                 return 
             
     except asyncio.TimeoutError:
@@ -77,15 +79,15 @@ if __name__ ==  "__main__" :
 
     image_save_dir.mkdir(parents= True, exist_ok= False)
 
-    data = pd.read_parquet(parquet_file_path)
-    urls, captions = data["image_url"].to_list(), data["caption"].to_list()
+    data = pd.read_parquet(parquet_file_path, columns=["URL", "top_caption"])
+    urls, captions = data["URL"].to_list(), data["top_caption"].to_list()
 
-    urls, captions = urls[:num_images], captions[:num_images]
+    urls, captions = urls[:1000000], captions[:1000000]
 
-    for i in range(math.ceil(num_images/image_per_batch)) :
+    for i in range(math.ceil(len(urls)/image_per_batch)) :
         s = i * image_per_batch
         e = min((i+1) * image_per_batch, len(urls))
-        print(f"Part{i} of {math.ceil(num_images/image_per_batch)}")
+        print(f"Part{i} of {math.ceil(len(urls)/image_per_batch)}")
         try : 
             output = asyncio.run(main(urls[s:e], captions[s:e]))
             
