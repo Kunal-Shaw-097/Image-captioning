@@ -3,6 +3,7 @@ data/
 __pycache__/
 extras/
 saved_model/
+Parquets/
 *.pt
 *.png
 *.jpg
