@@ -12,8 +12,8 @@ RUN python -m pip install --upgrade pip
 COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=deployRequirement.txt,target=deployRequirement.txt \ 
-    python -m pip install -r deployRequirement.txt 
+    --mount=type=bind,source=deploymentRequirement.txt,target=deploymentRequirement.txt \ 
+    python -m pip install -r deploymentRequirement.txt 
 
 RUN apt-get update && apt-get install ffmpeg libsm6 libxext6 curl -y
 
