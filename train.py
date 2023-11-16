@@ -28,6 +28,7 @@ Flicker_train_img_root_path = "data/Flicker30_dataset/flickr30k_images"
 ConceptaulCaptions_train_img_root_path = "data/conceptual_captions/images"
 PascalSentence_train_img_root_path = "data/Pascal_sentence/images"
 COCO_val_img_root_path = "data/COCO_dataset/val2017"
+lian_COCO_img_path = "data/lian_coco/images"
 
 
 COCO_train_caption_path = "data/COCO_dataset/captions_train2017.json"
@@ -35,13 +36,14 @@ Flicker_train_caption_path = "data/Flicker30_dataset/captions.csv"
 ConceptaulCaptions_caption_path = "data/conceptual_captions/captions.json"
 PascalSentence_caption_path = "data/Pascal_sentence/captions.json"
 COCO_val_caption_path = "data/COCO_dataset/captions_val2017.json"
+lian_COCO_caption_path = "data/lian_coco/final_captions.json"
 
 
 vocab_path = "vocab.json"
 
 model_save_dir =Path(__file__).parent / "saved_model"
 
-resume_checkpoint_path = "saved_model/pretrained_3_ct/epoch_v2.pt"
+resume_checkpoint_path = "saved_model/epoch1.pt"
 resume_training = True
 resume_weight_only = True
 
@@ -53,9 +55,9 @@ batch_size = 32
 gradient_accumulation_steps = 8
 num_epochs = 3
 
-initial_lr = 2e-5   # starting learning rate
-min_lr = 1e-5       # lowest learning rate
-warmup_steps = 10
+initial_lr = 5e-5   # starting learning rate
+min_lr = 2e-5       # lowest learning rate
+warmup_steps = 10000
 
 model_args = {
 
@@ -76,10 +78,11 @@ if __name__ == "__main__" :
     Flicker_train_dataset = Flicker30_dataset(Flicker_train_img_root_path, Flicker_train_caption_path, vocab_path, img_size, augment_data)
     PascalSentence_dataset = Custom_Captions_dataset(PascalSentence_train_img_root_path, PascalSentence_caption_path, vocab_path, img_size, augment_data)
     ConceptualCaptions_train_dataset = Custom_Captions_dataset(ConceptaulCaptions_train_img_root_path , ConceptaulCaptions_caption_path , vocab_path, img_size, augment_data)
+    lian_COCO_train_dataset = Custom_Captions_dataset(lian_COCO_img_path, lian_COCO_caption_path,vocab_path, img_size, augment_data)
     
    
     val_dataset = COCO_Dataset(COCO_val_img_root_path, COCO_val_caption_path, vocab_path)
-    train_dataset = ConcatDataset([COCO_train_dataset, Flicker_train_dataset, PascalSentence_dataset, ConceptualCaptions_train_dataset])   
+    train_dataset = ConcatDataset([COCO_train_dataset, Flicker_train_dataset, PascalSentence_dataset, ConceptualCaptions_train_dataset, lian_COCO_train_dataset]) 
 
     val_dataloader = DataLoader(
         val_dataset, pin_memory= True,batch_size= batch_size,
@@ -154,7 +157,7 @@ if __name__ == "__main__" :
 
                 scaler.scale(loss).backward()
 
-                '''if i != 0 and i % 1000 == 0 :
+                '''if i != 0 and i % 10000 == 0 :
                     print(tokenizer.decode(target))
                     print(tokenizer.decode(model.process_output(output)))'''
                 
