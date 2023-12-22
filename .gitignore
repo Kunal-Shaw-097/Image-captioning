@@ -11,3 +11,4 @@ log/
 *.pt
 *.parquet
 !vocab.json
+build/
