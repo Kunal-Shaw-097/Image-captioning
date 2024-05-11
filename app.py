@@ -6,7 +6,7 @@ from utils.tokenizer import Tokenizer
 from utils.general import resume_checkpoint
 from utils.process_image import letterbox
 from pathlib import Path
-import os
+import gdown
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -44,7 +44,7 @@ def uploaded_file(filename):
 if __name__ == '__main__':
     if Path("saved_model/best.pt").exists() == False :
         Path("saved_model/").mkdir(parents= True, exist_ok= True)
-        os.system("curl -L 'https://drive.google.com/uc?export=download&id=1sc1l1AWDHsKsV_N9OpQcnjGfgwSwdggA&confirm=t' > saved_model/best.pt")
+        gdown.download(id='1sc1l1AWDHsKsV_N9OpQcnjGfgwSwdggA', output='saved_model/best.pt')
 
     tokenizer = Tokenizer(vocab_path)
     model = resume_checkpoint(model_path, tokenizer, device=device)
