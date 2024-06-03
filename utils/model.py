@@ -52,7 +52,7 @@ class Model(nn.Module) :
         loss = None
         if target is not None:
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)) , target.view(-1), ignore_index= 2)      #cross-entropy between (B*T, C) and (B*T)
-        return logits, loss       
+        return logits, loss              # just remove the loss with tracing the model with jit     
 
     @torch.no_grad()
     def generate(self, x : torch.Tensor, tokenizer, device : str = 'cuda', greedy : bool = True, top_k : int = None, maxlen : int = 100) :

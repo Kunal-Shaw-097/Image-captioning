@@ -7,7 +7,7 @@ model_path = "saved_model/best.pt"
 vocab_path = "vocab.json"
 
 tokenizer = Tokenizer(vocab_path)
-
+## remove loss return from Model while tracing
 model = resume_checkpoint(model_path, tokenizer= tokenizer, device="cpu")
 
 model.eval()
